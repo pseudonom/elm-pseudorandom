@@ -1,0 +1,9 @@
+{ "version": "0.1.0"
+, "summary": "Pure pseudorandom numbers"
+, "description": "This library generates pure (no Signal involved) pseudorandom numbers using the xorshift algorithm (https://en.wikipedia.org/wiki/Xorshift). For convenience, the PRNG functions expose a monadic API."
+, "license": "GPL3"
+, "repository": "https://github.com/pseudonom/Pseudorandom.git"
+, "exposed-modules": ["Pseudorandom"]
+, "elm-version": "0.12"
+, "dependencies":{}
+}
