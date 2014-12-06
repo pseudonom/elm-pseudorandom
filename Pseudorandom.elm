@@ -3,11 +3,11 @@ module Pseudorandom ( pure, (=<<), chain, sequence, mapR, randomInt
                     , (<$>), fmap, ap, (<*>), (<=<), Random) where
 
 {-| This library generates pure (no `Signal` involved) pseudorandom numbers
-using the xorshift algorithm (https://en.wikipedia.org/wiki/Xorshift). For
+using the [xorshift algorithm](https://en.wikipedia.org/wiki/Xorshift). For
 convenience, the PRNG functions expose a monadic API.
 
 
-```elm
+```haskell
 seed = 1
 getRandom seed randomInt == 270369
 getRandom seed <| mapR (always <| randomRange (100, 110)) [1..10] ==  [106,105,110,104,102,110,105,106,101,110]
