@@ -1,27 +1,23 @@
-module Pseudorandom ( pure, (>>=), chain, sequence, mapM, randomInts
-                    , randomFloats, randomRange) where
+module Pseudorandom ( pure, (=<<), chain, sequence, mapR, randomInt
+                    , randomFloat, randomRange, getRandom, RandomSeed
+                    , (<$>), fmap, ap, (<*>), (<=<), Random) where
 
 {-| This library generates pure (no `Signal` involved) pseudorandom numbers
 using the xorshift algorithm (https://en.wikipedia.org/wiki/Xorshift). For
 convenience, the PRNG functions expose a monadic API.
 
-`Random a` is a type synonym for `Int -> (a, Int)`.
 
-```haskell
-seed = 7
-randomInts 2 seed == ([-1459243860,11355432],-1459243860)
-randomInts 1 -1459243860 == ([-308848668],-308848668)
-randomInts 3 seed == ([-308848668,-1459243860,11355432],-308848668)
-
-single : Rand Int
-single = (\(r, s) -> (head r, s)) . randomInts 1
+```elm
+seed = 1
+getRandom seed randomInt == 270369
+getRandom seed <| mapR (always <| randomRange (100, 110)) [1..10] ==  [106,105,110,104,102,110,105,106,101,110]
 ```
 
 # Making random numbers
-@docs randomInts, randomFloats, randomRange
+@docs randomInt, randomFloat, randomRange, RandomSeed, getRandom
 
 # Working with random numbers
-@docs pure, chain, (>>=), sequence, mapM
+@docs fmap, (<$>), pure, ap, (<*>), sequence, mapR, chain, (=<<), (<=<)
 -}
 
 import Bitwise
@@ -30,31 +26,57 @@ infixr 3 ***
 (***) : (a -> b) -> (c -> d) -> (a, c) -> (b, d)
 f *** g = (\(x, y) -> (f x, g y))
 
+first : (a -> b) -> (a, c) -> (b, c)
+first f = f *** identity
+
 type State s a = s -> (a, s)
 type RandomSeed = Int
 type Random a = State RandomSeed a
 
-{-| Lifts a value into the `Random` monad. -}
+{-| Lifts a function to `Random`. -}
+fmap : (a -> b) -> Random a -> Random b
+fmap = (<$>)
+
+infixl 4 <$>
+{-| The conventional infix operator for fmap -}
+(<$>) : (a -> b) -> Random a -> Random b
+f <$> r = first f << r
+
+{-| Lifts a value into `Random`. -}
 pure : a -> Random a
-pure a = (,) a
+pure = (,) 
 
 {-| Applies a `Random` function to a `Random` value. -}
-chain : Random a -> (a -> Random b) -> Random b
-chain = (>>=)
+ap : Random (a -> b) -> Random a -> Random b
+ap = (<*>)
 
-{-| The conventional infix operator for chain. -}
-infixl 1 >>=
-(>>=) : Random a -> (a -> Random b) -> Random b
-m >>= f = uncurry f << m
+{-| The conventional infix operator for ap. -}
+infixl 4 <*>
+(<*>) : Random (a -> b) -> Random a -> Random b
+rf <*> ra = (\(a, i) -> first ((|>) a) <| rf i) << ra
 
 {-| Transform a list of `Random` values into a `Random` list of values. Much
 like `Signal`'s `combine`. -}
 sequence : [Random a] -> Random [a]
-sequence ms = foldr (\m m' -> m >>= \x -> m' >>= pure . (::) x) (pure []) ms
+sequence = foldr (\x xs -> (::) <$> x <*> xs) (pure [])
 
-{-| Applies `Random` function to every element in a list. -}
-mapM : (a -> Random b) -> [a] -> Random [b]
-mapM f = sequence . map f
+{-| Applies a `Random` function to every element in a list. -}
+mapR : (a -> Random b) -> [a] -> Random [b]
+mapR f = sequence << map f
+
+{-| Applies a `Random`-producing function to a `Random` value. -}
+chain : (a -> Random b) -> Random a -> Random b
+chain = (=<<)
+
+infixr 1 =<< 
+{-| The conventional infix operator for chain. -}
+(=<<) : (a -> Random b) -> Random a -> Random b
+f =<< m = uncurry f << m
+
+infixr 1 <=<
+{-| Compose `random`-producing functions. -}
+(<=<) : (b -> Random c) -> (a -> Random b) -> (a -> Random c)
+f <=< g = \x -> f =<< g x 
 
 -- Semi-arbitrary parameters
 a = 13
@@ -69,25 +91,22 @@ xorshift s = let x = s `Bitwise.xor` (s `Bitwise.shiftLeft` a)
                  y = x `Bitwise.xor` (x `Bitwise.shiftRight` b) in
              y `Bitwise.xor` (y `Bitwise.shiftLeft` c)
 
-{-| Produces several Ints in the range [-2^32, 2^32] (except 0). -}
-randomInts : Int -> Random [Int]
-randomInts n r = repeat n (\(xs, s) ->
-                            let s' = xorshift s in
-                            (s' :: xs, s')) ([], r)
+{-| Produces Int in the range [-2^32, 2^32] (except 0). -}
+randomInt : Random Int
+randomInt r = let s' = xorshift r in
+              (s', s')
 
-{-| Produces several Floats in the range [0, 1). -}
-randomFloats : Int -> Random [Float]
-randomFloats n = (map (\n' -> toFloat (abs n' - 1) / -minInt) *** identity) . randomInts n
+{-| Produces Float in the range [0, 1). -}
+randomFloat : Random Float
+randomFloat = first (\n' -> toFloat (abs n' - 1) / -minInt) << randomInt
 
-{-| Produces several Ints in the specified range. -}
-randomRange : (Int, Int) -> Int -> Random [Int]
-randomRange rn n = (map (roundClamp rn) *** identity) . randomInts n
+{-| Produces Int in the specified range. -}
+randomRange : (Int, Int) -> Random Int
+randomRange rn = first (roundClamp rn) << randomInt
+
+{-| Use a seed to extract a random value. -}
+getRandom : RandomSeed -> Random a -> a
+getRandom n r = fst <| r n
 
 roundClamp : (number, number) -> number -> number
 roundClamp (l, g) i = l + (i - l) % (g - l + 1)
-
-repeat : Int -> (a -> a) -> a -> a
-repeat n f a =
-  case n of
-    0 -> a
-    _ -> repeat (n - 1) f (f a)
