@@ -1,8 +1,10 @@
 module Pseudorandom.Infix ((<$>), (<*>), (=<<), (<=<)) where
 
 {-|
+```elm
 seed = 7
 get seed (max <$> constant 1 <*> constant 3) == 3
+```
 
 # Infix operators
 @docs (<$>), (<*>), (=<<), (<=<)
