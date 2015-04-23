@@ -55,7 +55,7 @@ map f = combine << List.map f
 andThen : (a -> Random b) -> Random a -> Random b
 andThen = (=<<)
 
-{-| Produces Int in the range [-2^32, 2^32] (except 0). -}
+{-| Produces a 32-bit Int (except 0). -}
 int : Random Int
 int r = let s' = xorshift r in (s', s')
 
@@ -63,9 +63,12 @@ int r = let s' = xorshift r in (s', s')
 float : Random Float
 float = first (\n' -> toFloat (abs n' - 1) / -minInt) << int
 
-{-| Produces Int in the specified range. -}
+{-| Produces Int in the range [min, max). -}
 range : (Int, Int) -> Random Int
-range rn = first (roundClamp rn) << int
+range (min, max) = let s = max - min in
+  (\n -> if (n >= maxInt - maxInt % s)
+         then range (min, max)
+         else constant <| min + n % s) =<< int
 
 {-| Use a seed to extract a random value. -}
 get : Seed -> Random a -> a
